@@ -25,13 +25,15 @@ import (
 
 	"github.com/tpural/tremolo-discord/internal/bot"
 	"github.com/tpural/tremolo-discord/internal/tremolo"
+	"github.com/tpural/tremolo-discord/internal/upkeeper"
 )
 
 var version = "dev"
 
 // Config is the bot's configuration. Tokens come from the environment:
 // DISCORD_TOKEN, TREMOLO_TOKEN (a person's, not an assistant's) and
-// WEBHOOK_TOKEN (what tremolo's webhook channel sends).
+// WEBHOOK_TOKEN (what tremolo's webhook channel sends), and UPKEEPER_TOKEN
+// (upkeeper's $PATROL_TOKEN) when upkeeper.url is set.
 type Config struct {
 	Listen  string `json:"listen"`
 	Tremolo struct {
@@ -48,6 +50,10 @@ type Config struct {
 		// empty is the server's owner.
 		Allow []string `json:"allow"`
 	} `json:"discord"`
+	Upkeeper struct {
+		// URL is upkeeper's admin address, for /patrol; empty is no /patrol.
+		URL string `json:"url"`
+	} `json:"upkeeper"`
 	Every string `json:"every"`
 }
 
@@ -102,6 +108,13 @@ func run(path string, log *slog.Logger) error {
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
 	t := tremolo.New(cfg.Tremolo.URL, env["TREMOLO_TOKEN"])
 	bt := &bot.Bot{D: dg, T: t, URL: strings.TrimRight(cfg.Tremolo.UI, "/"), Log: log}
+	if cfg.Upkeeper.URL != "" {
+		token := os.Getenv("UPKEEPER_TOKEN")
+		if token == "" {
+			return errors.New("$UPKEEPER_TOKEN is required with upkeeper.url")
+		}
+		bt.Patrol = upkeeper.New(cfg.Upkeeper.URL, token).Patrol
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -217,7 +230,7 @@ func setUp(s *discordgo.Session, r *discordgo.Ready, cfg *Config, bt *bot.Bot, l
 		allow = []string{g.OwnerID}
 	}
 	bt.Allowed = func(id string) bool { return slices.Contains(allow, id) }
-	if _, err := s.ApplicationCommandBulkOverwrite(r.User.ID, guild, bot.Commands); err != nil {
+	if _, err := s.ApplicationCommandBulkOverwrite(r.User.ID, guild, bt.Commands()); err != nil {
 		return fmt.Errorf("registering commands: %w", err)
 	}
 	if err := bt.Rebuild(); err != nil {

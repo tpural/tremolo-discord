@@ -12,6 +12,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/tpural/tremolo-discord/internal/tremolo"
+	"github.com/tpural/tremolo-discord/internal/upkeeper"
 )
 
 // fakeDiscord keeps messages by channel, newest last, and what was done.
@@ -376,5 +377,42 @@ func TestEscalations(t *testing.T) {
 	}
 	if !slices.Contains(tr.did, "reopen 5 from Discord by tim") {
 		t.Errorf("reopen: %v", tr.did)
+	}
+}
+
+func TestPatrol(t *testing.T) {
+	b, d, _ := setup()
+	ctx := context.Background()
+	cmd := func(user string) *discordgo.Interaction {
+		return &discordgo.Interaction{
+			Type:   discordgo.InteractionApplicationCommand,
+			Member: &discordgo.Member{User: &discordgo.User{ID: user, Username: "tim"}},
+			Data:   discordgo.ApplicationCommandInteractionData{Name: "patrol"},
+		}
+	}
+	if slices.ContainsFunc(b.Commands(), func(c *discordgo.ApplicationCommand) bool { return c.Name == "patrol" }) {
+		t.Error("/patrol without an upkeeper")
+	}
+	asks := 0
+	b.Patrol = func(context.Context) error {
+		if asks++; asks > 1 {
+			return upkeeper.ErrAsked
+		}
+		return nil
+	}
+	if !slices.ContainsFunc(b.Commands(), func(c *discordgo.ApplicationCommand) bool { return c.Name == "patrol" }) || len(commands) != 3 {
+		t.Error("no /patrol, or it was added to the shared list")
+	}
+	b.Interaction(ctx, cmd("stranger"))
+	b.Interaction(ctx, cmd("me"))
+	b.Interaction(ctx, cmd("me"))
+	if asks != 2 || len(d.answers) != 3 {
+		t.Fatalf("asked %d times, %d answers", asks, len(d.answers))
+	}
+	if a := d.answers[1]; a.Data.Flags != 0 || !strings.Contains(a.Data.Content, "asked from Discord by tim") {
+		t.Errorf("asked: %+v", a.Data)
+	}
+	if a := d.answers[2]; a.Data.Flags != discordgo.MessageFlagsEphemeral || a.Data.Content != "A patrol is already on its way." {
+		t.Errorf("again: %+v", a.Data)
 	}
 }
