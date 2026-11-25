@@ -64,8 +64,10 @@ type Bot struct {
 	URL string
 	// Allowed is who may press buttons, run commands and add notes.
 	Allowed func(userID string) bool
-	Log     *slog.Logger
-	Now     func() time.Time
+	// Patrol asks upkeeper for a patrol; nil means there's no /patrol.
+	Patrol func(ctx context.Context) error
+	Log    *slog.Logger
+	Now    func() time.Time
 
 	mu sync.Mutex
 	// posted is every key in the channel's recent messages.

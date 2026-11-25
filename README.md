@@ -10,7 +10,8 @@ investigations in one channel, with buttons.
 - **Escalated investigations** come in with **Hand back to upkeeper** and **Abandon**, and a thread.
   Replies in the thread are added to the investigation as notes, for agents and people to read. When it
   closes, the thread says how and is archived. Gaps aren't posted; they wait in the daily report.
-- **Commands:** `/status` (what's firing, what agents are doing and waiting on), `/pause why`, `/resume`.
+- **Commands:** `/status` (what's firing, what agents are doing and waiting on), `/pause why`, `/resume`,
+  and `/patrol` (have [upkeeper](https://github.com/tpural/upkeeper) patrol now) when `upkeeper.url` is set.
 - Other announcements (pause notices, the daily report, the weekly digest) are posted as they come.
 
 Only `allow`ed Discord users (the server's owner, by default) can use the buttons and commands, or add
@@ -40,6 +41,8 @@ discord:
   guild: ""                           # the server's ID; empty when the bot is in just one
   channel: lab-ops                    # name or ID
   allow: []                           # Discord user IDs; empty is the server's owner
+upkeeper:
+  url: ""                             # upkeeper's admin address, for /patrol; empty is no /patrol
 every: 15s                            # how often to look for actions and escalations
 ```
 
@@ -49,6 +52,7 @@ From the environment:
 - `TREMOLO_TOKEN`: a tremolo API token **without** a scope, so it acts as you: approvals must come
   from a person, and an assistant token can't approve.
 - `WEBHOOK_TOKEN`: a secret tremolo sends to `/notify`.
+- `UPKEEPER_TOKEN`: upkeeper's `$PATROL_TOKEN`, when `upkeeper.url` is set.
 
 In tremolo, add a webhook channel for it, and send it what should reach Discord:
 

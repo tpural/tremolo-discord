@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,15 +11,26 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/tpural/tremolo-discord/internal/tremolo"
+	"github.com/tpural/tremolo-discord/internal/upkeeper"
 )
 
-// Commands are the slash commands the bot answers.
-var Commands = []*discordgo.ApplicationCommand{
+var commands = []*discordgo.ApplicationCommand{
 	{Name: "status", Description: "What's firing, and what agents are doing and waiting on"},
 	{Name: "pause", Description: "Stop all agents' changes", Options: []*discordgo.ApplicationCommandOption{
 		{Type: discordgo.ApplicationCommandOptionString, Name: "why", Description: "Why, for the record", Required: true},
 	}},
 	{Name: "resume", Description: "Let agents make changes again"},
+}
+
+var patrol = &discordgo.ApplicationCommand{Name: "patrol", Description: "Have upkeeper patrol the cluster now"}
+
+// Commands are the slash commands the bot answers: /patrol only when it can
+// ask upkeeper.
+func (b *Bot) Commands() []*discordgo.ApplicationCommand {
+	if b.Patrol == nil {
+		return commands
+	}
+	return append(commands[:len(commands):len(commands)], patrol)
 }
 
 func userOf(i *discordgo.Interaction) *discordgo.User {
@@ -149,6 +161,19 @@ func (b *Bot) command(ctx context.Context, i *discordgo.Interaction, via string)
 		b.say(i, "Agents can make changes again.")
 	case "status":
 		b.whisper(i, b.status(ctx))
+	case "patrol":
+		if b.Patrol == nil {
+			b.whisper(i, "There's no upkeeper to ask.")
+			return
+		}
+		switch err := b.Patrol(ctx); {
+		case errors.Is(err, upkeeper.ErrAsked):
+			b.whisper(i, "A patrol is already on its way.")
+		case err != nil:
+			b.whisper(i, "upkeeper said: "+err.Error())
+		default:
+			b.say(i, "upkeeper will patrol once the investigations waiting are done (asked "+via+").")
+		}
 	}
 }
 
